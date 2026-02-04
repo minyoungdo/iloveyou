@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>💕 Minyoung Maker</title>
+<link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div class="game-container">
+
+    <h1>💕 Minyoung Maker</h1>
+
+    <div class="top-bar">
+        ❤️ Hearts: <span id="hearts">0</span>
+        💕 Affection: <span id="affection">0</span>
+    </div>
+
+    <div class="character-area">
+        <img id="character" src="assets/characters/stage1-neutral.png">
+    </div>
+
+    <div class="buttons">
+
+        <button onclick="playMiniGame()">
+        🎮 Play Mini Game
+        </button>
+
+        <button onclick="openShop()">
+        🛍️ Shop
+        </button>
+
+        <button onclick="evolveCheck()">
+        ✨ Check Growth
+        </button>
+
+    </div>
+
+    <div id="dialogue"></div>
+
+</div>
+
+<!-- Background Music -->
+<audio id="bgMusic" loop autoplay>
+    <source src="assets/music/cute-arcade.mp3" type="audio/mpeg">
+</audio>
+
+<script src="game.js"></script>
+
+</body>
+</html>
