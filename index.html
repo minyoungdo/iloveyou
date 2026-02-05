@@ -98,7 +98,7 @@
           <div class="tile-sub">Click only when the heart turns pink</div>
         </button>
         <button class="tile" data-game="dino">
-          <div class="tile-title">🦖 Minyoung Dino Run</div>
+          <div class="tile-title">🦖 Run, Cuddlosaurus! </div>
           <div class="tile-sub">Jump over obstacles • Space/↑ to jump (30s)</div>
         </button>
       </div>
@@ -133,7 +133,18 @@
     <source src="assets/music/cute-arcade.mp3" type="audio/mpeg" />
   </audio>
 
+  <script>
+    // Start music on the first user interaction (browsers block true autoplay with sound)
+    const bgMusic = document.getElementById("bgMusic");
+
+    function startBgMusic() {
+      bgMusic.play().catch(() => {});
+      document.removeEventListener("pointerdown", startBgMusic);
+    }
+
+    document.addEventListener("pointerdown", startBgMusic);
+  </script>
+
   <script src="game.js"></script>
 </body>
 </html>
-
