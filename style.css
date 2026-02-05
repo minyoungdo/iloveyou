@@ -179,6 +179,10 @@ h1{margin:0;color:var(--pink);letter-spacing:.5px}
   color: var(--pink);
   border:1px solid rgba(255,77,136,.35);
 }
+.btn:disabled{
+  opacity:.55;
+  cursor:not-allowed;
+}
 
 .dialogue{
   margin-top:6px;
@@ -310,3 +314,37 @@ h1{margin:0;color:var(--pink);letter-spacing:.5px}
   text-align:center;
 }
 
+/* Modal */
+.modal{
+  position:fixed;
+  inset:0;
+  background: rgba(0,0,0,.18);
+  display:grid;
+  place-items:center;
+  z-index: 99;
+}
+.modal-card{
+  width:min(560px, 92vw);
+  background: rgba(255,255,255,.96);
+  border:1px solid rgba(255,77,136,.22);
+  border-radius:20px;
+  box-shadow: 0 22px 60px rgba(0,0,0,.15);
+  padding:16px;
+}
+.modal-title{
+  font-weight:900;
+  color: var(--pink);
+  margin-bottom:8px;
+}
+.modal-text{
+  color:#333;
+  line-height:1.35;
+  white-space:pre-line;
+  margin-bottom:12px;
+}
+.modal-actions{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
