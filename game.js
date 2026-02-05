@@ -568,7 +568,7 @@ Activates “Safe & Sleepy”.`,
   /* New items you requested */
   {
     id: "koreanFeast",
-    name: `🍚 “Korean Comfort Feast” (한식 풀코스)`,
+    name: `🍚 “Korean Comfort Feast”`,
     cost: 42,
     affectionHidden: 0,
     type: "Korean Food Buff",
@@ -578,7 +578,7 @@ Hidden Effect:
 Activates “Homebody Harmony”
 → sad/angry outcomes become less likely for a while
 → chance to trigger a soft extra popup`,
-    flavor: `“밥 먹고 나면, 마음도 조금 풀려요.”`,
+    flavor: `“Makes her happy no matter what she's going through.”`,
     unique: false,
     onBuy() {
       state.buffKoreanFeast = Math.max(state.buffKoreanFeast, 6);
@@ -1433,3 +1433,4 @@ startIdleWatcher();
 
 // sometimes a popup greets you
 setTimeout(() => { if (Math.random() < 0.25) maybePopup("home"); }, 700);
+
