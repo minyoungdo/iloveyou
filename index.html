@@ -8,7 +8,17 @@
 </head>
 
 <body>
-  <div class="bg-hearts" aria-hidden="true"></div>
+  <!-- Floating hearts background -->
+  <div class="bg" aria-hidden="true">
+    <div class="heart h1">💗</div>
+    <div class="heart h2">💞</div>
+    <div class="heart h3">💗</div>
+    <div class="heart h4">💖</div>
+    <div class="heart h5">💗</div>
+    <div class="heart h6">💞</div>
+    <div class="heart h7">💗</div>
+    <div class="heart h8">💖</div>
+  </div>
 
   <main class="app">
     <header class="top">
@@ -31,7 +41,7 @@
     <section class="card view" id="view-home">
       <div class="home-grid">
         <div class="character-wrap">
-          <img id="character" class="character" src="assets/characters/stage1-neutral.png" alt="Minyoung pixel character" />
+          <img id="character" class="character" alt="Minyoung pixel character" />
           <div class="stage-label" id="stageLabel">Stage 1: Toddler</div>
           <div class="tiny-note" id="passivesNote"></div>
         </div>
@@ -106,13 +116,11 @@
         </div>
       </div>
 
-      <div id="gameArea" class="game-area">
-        <!-- game UI injected here -->
-      </div>
+      <div id="gameArea" class="game-area"></div>
     </section>
   </main>
 
-  <!-- Music (optional file). If you don't have the mp3 yet, it will just fail silently. -->
+  <!-- Optional background music file -->
   <audio id="bgMusic" loop autoplay>
     <source src="assets/music/cute-arcade.mp3" type="audio/mpeg" />
   </audio>
