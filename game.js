@@ -1,10 +1,14 @@
+/* game.js (FULL) */
 /***********************
-  Minyoung Maker v2
-  - 4 stages
-  - Mood system (neutral/happy/sad/angry)
-  - Random popup questions that affect mood (+ hidden rewards/penalties)
-  - Shop hides affection values
-  - Gift makes Minyoung happy sprite immediately
+  Minyoung Maker (Stages 1–4)
+  - 5 mini games: catch, pop, memory, react, dino
+  - Mood system: neutral/happy/sad/angry
+  - Random popup questions that affect mood (not obvious)
+  - Shop hides affection effects
+  - Any gift makes Minyoung happy sprite immediately
+  - Auto stage evolve (no button)
+  - Idle 30s without shopping or games => angry
+  - Dino Run upgrades: boing SFX, heart trail, stage-themed obstacles
 ************************/
 
 const $ = (id) => document.getElementById(id);
@@ -16,18 +20,24 @@ const VIEWS = {
   game: $("view-game")
 };
 
-const SAVE_KEY = "minyoungMakerSave_v2";
+const SAVE_KEY = "minyoungMakerSave_v3";
 
 const state = {
   hearts: 0,
   affection: 0,
-  stage: 1,
-  mood: "neutral",            // neutral | happy | sad | angry
+  stage: 1,                 // 1..4 only
+  mood: "neutral",          // neutral | happy | sad | angry
   inventory: [],
   affectionMult: 1.0,
   flags: {},
-  // prevents popup spam
-  popupCooldown: 0
+  popupCooldown: 0,
+
+  // timed buffs (counts down per popup roll)
+  buffKoreanFeast: 0,
+  buffTornadoFudge: 0,
+  buffGoofyNate: 0,
+
+  lastActionAt: Date.now()
 };
 
 const STAGE_LABELS = {
@@ -36,6 +46,9 @@ const STAGE_LABELS = {
   3: "Stage 3: College",
   4: "Stage 4: Adult"
 };
+
+function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
+function clampStage(n) { return clamp(n, 1, 4); }
 
 function save() {
   localStorage.setItem(SAVE_KEY, JSON.stringify(state));
@@ -46,11 +59,19 @@ function load() {
   try {
     const data = JSON.parse(raw);
     Object.assign(state, data);
+
     state.inventory ||= [];
     state.flags ||= {};
     state.affectionMult ||= 1.0;
     state.mood ||= "neutral";
     state.popupCooldown ||= 0;
+
+    state.buffKoreanFeast ||= 0;
+    state.buffTornadoFudge ||= 0;
+    state.buffGoofyNate ||= 0;
+
+    state.lastActionAt ||= Date.now();
+    state.stage = clampStage(state.stage || 1);
   } catch {}
 }
 
@@ -63,75 +84,100 @@ function showView(name) {
   VIEWS[name].classList.remove("hidden");
 }
 
-function clamp(n, min, max) {
-  return Math.max(min, Math.min(max, n));
-}
-
-/** mood handling */
-function setMood(newMood, opts = { flashMs: 1200, persist: true }) {
-  const allowed = ["neutral","happy","sad","angry"];
-  if (!allowed.includes(newMood)) newMood = "neutral";
-  state.mood = newMood;
+function touchAction() {
+  state.lastActionAt = Date.now();
+  if (state.mood === "angry") setMood("neutral", { persist: true });
   save();
-  renderHUD();
-
-  // optional: auto-calm back to neutral after a bit (still counts as "status" while shown)
-  if (!opts.persist && newMood !== "neutral") {
-    setTimeout(() => {
-      state.mood = "neutral";
-      save();
-      renderHUD();
-    }, opts.flashMs ?? 1200);
-  }
 }
 
-/** sprite */
-function setCharacterSprite(stage, mood = "neutral") {
+function spritePathFor(stage, mood) {
+  const s = clampStage(stage);
+  const m = ["happy","sad","angry","neutral"].includes(mood) ? mood : "neutral";
+  return `assets/characters/stage${s}-${m}.png`;
+}
+
+function updateSprite() {
   const img = $("character");
+  if (!img) return;
 
-  // Try mood file first
-  const moodPath = `assets/characters/stage${stage}-${mood}.png`;
-  const neutralPath = `assets/characters/stage${stage}-neutral.png`;
-
+  const desired = spritePathFor(state.stage, state.mood);
   img.onerror = () => {
-    // fallback to neutral if mood file missing
+    // fallback: neutral sprite for that stage
     img.onerror = () => {
       img.removeAttribute("src");
       img.alt = "Missing sprite. Add assets/characters/stage1-neutral.png etc.";
     };
-    img.src = neutralPath;
+    img.src = spritePathFor(state.stage, "neutral");
   };
-
-  img.src = moodPath;
+  img.src = desired;
 }
 
-/** rewards */
+function setMood(newMood, opts = { persist: true }) {
+  const allowed = ["neutral","happy","sad","angry"];
+  state.mood = allowed.includes(newMood) ? newMood : "neutral";
+  updateSprite();
+  if (opts?.persist) save();
+  renderHUD();
+}
+
+function recomputeStage() {
+  // Simple auto-evolve thresholds (edit if you want)
+  // Stage 1: <80, Stage 2: 80-159, Stage 3: 160-279, Stage 4: 280+
+  const a = state.affection || 0;
+  let newStage = 1;
+  if (a >= 80) newStage = 2;
+  if (a >= 160) newStage = 3;
+  if (a >= 280) newStage = 4;
+
+  newStage = clampStage(newStage);
+  if (newStage !== state.stage) {
+    state.stage = newStage;
+    // stage change goes neutral (sprite updates automatically)
+    state.mood = "neutral";
+  }
+
+  updateSprite();
+  save();
+  renderHUD();
+}
+
 function addRewards(heartsEarned, affectionEarned) {
   state.hearts += heartsEarned;
 
-  // affection gets perfume multiplier
-  const boosted = Math.round(affectionEarned * state.affectionMult);
+  const boosted = Math.round(affectionEarned * (state.affectionMult || 1));
   state.affection += boosted;
 
-  // small mood drift: if she’s angry/sad, small affection gains calm her slightly
-  if (state.mood === "angry" && boosted >= 6 && Math.random() < 0.35) setMood("neutral");
-  if (state.mood === "sad" && boosted >= 4 && Math.random() < 0.40) setMood("neutral");
-
   save();
+  recomputeStage();
   renderHUD();
+}
+
+/***********************
+  Idle anger watcher
+************************/
+function startIdleWatcher() {
+  setInterval(() => {
+    const now = Date.now();
+    const idleMs = now - (state.lastActionAt || now);
+    if (idleMs >= 30000) {
+      if (state.mood !== "angry") {
+        setMood("angry", { persist: true });
+        speak("Minyoung is waiting… and getting annoyed 😭 (Go play a game or buy a gift.)");
+      }
+    }
+  }, 500);
 }
 
 /***********************
   Popup Questions (not obvious)
 ************************/
-
 const POPUPS = [
   {
     title: "A tiny decision appears…",
     text: "Minyoung is staring at the fridge like it personally offended her.\nWhat do you do?",
     options: [
-      { label: "Say nothing. Quietly rearrange the fridge like a stealth ninja.", mood: "happy", hearts: +2, affection: +3 },
-      { label: "Offer a serious speech about food organization and discipline.", mood: "angry", hearts: +1, affection: -2 }
+      { label: "Say nothing. Quietly rearrange it like a stealth ninja.", mood: "happy", hearts: +2, affection: +3 },
+      { label: "Deliver a serious speech about organization and discipline.", mood: "angry", hearts: +1, affection: -2 }
     ]
   },
   {
@@ -163,7 +209,7 @@ const POPUPS = [
     text: "Minyoung points at a random object and goes:\n“This has my vibe.”\nYou…",
     options: [
       { label: "Agree instantly and treat it like sacred lore.", mood: "happy", hearts: +2, affection: +3 },
-      { label: "Ask for a rubric so you can understand the vibe categories.", mood: "angry", hearts: +1, affection: -2 }
+      { label: "Ask for a rubric so you can understand vibe categories.", mood: "angry", hearts: +1, affection: -2 }
     ]
   }
 ];
@@ -176,15 +222,23 @@ function maybePopup(context = "any") {
     return;
   }
 
-  // chance to appear
-  const chance = (context === "afterGame") ? 0.55 : (context === "afterGift") ? 0.35 : 0.25;
+  let chance = (context === "afterGame") ? 0.55 : (context === "afterGift") ? 0.35 : 0.25;
+
+  // Tornado Fudge slightly increases popup chance
+  if (state.buffTornadoFudge > 0 && Math.random() < 0.25) chance += 0.12;
+
   if (Math.random() > chance) return;
 
   const pick = POPUPS[Math.floor(Math.random() * POPUPS.length)];
   openPopup(pick);
 
-  // set cooldown for next few actions
   state.popupCooldown = 2;
+
+  // tick down timed buffs whenever a popup happens
+  if (state.buffKoreanFeast > 0) state.buffKoreanFeast -= 1;
+  if (state.buffTornadoFudge > 0) state.buffTornadoFudge -= 1;
+  if (state.buffGoofyNate > 0) state.buffGoofyNate -= 1;
+
   save();
 }
 
@@ -203,25 +257,44 @@ function openPopup(popup) {
 
     btn.addEventListener("click", () => {
       closePopup();
+      touchAction();
 
-      // apply hidden effects
       if (typeof opt.hearts === "number") state.hearts += opt.hearts;
+
       if (typeof opt.affection === "number") {
-        const boosted = Math.round(opt.affection * state.affectionMult);
+        const boosted = Math.round(opt.affection * (state.affectionMult || 1));
         state.affection += boosted;
       }
 
-      setMood(opt.mood, { persist: true });
+      // ---- Buff logic: gently bend outcomes (not obvious) ----
+      let finalMood = opt.mood;
+
+      if (state.buffKoreanFeast > 0 && (finalMood === "sad" || finalMood === "angry")) {
+        if (Math.random() < 0.55) finalMood = "neutral";
+        if (Math.random() < 0.35) finalMood = "happy";
+      }
+
+      if (state.buffGoofyNate > 0 && finalMood !== "happy") {
+        if (Math.random() < 0.30) finalMood = "happy";
+      }
+
+      if (state.buffTornadoFudge > 0 && (finalMood === "sad" || finalMood === "angry")) {
+        if (Math.random() < 0.40) finalMood = "neutral";
+        if (Math.random() < 0.20) finalMood = "happy";
+      }
+
+      setMood(finalMood, { persist: true });
+
       save();
+      recomputeStage();
       renderHUD();
 
-      // little reaction line
       const reaction = {
         happy: "Minyoung looks pleased. Like… dangerously pleased 💗",
         sad: "Minyoung goes quiet. You feel like you missed something 😭",
         angry: "Minyoung is smiling… but it’s the kind that’s a warning 🙂",
         neutral: "Minyoung nods. The vibe is… stable."
-      }[opt.mood];
+      }[finalMood];
 
       speak(reaction);
     });
@@ -229,12 +302,12 @@ function openPopup(popup) {
     actions.appendChild(btn);
   });
 
-  // add a subtle “do nothing” close for safety
   const skip = document.createElement("button");
   skip.className = "btn ghost";
   skip.innerText = "Ignore (risky)";
   skip.addEventListener("click", () => {
     closePopup();
+    touchAction();
     speak("You ignored the moment. The universe is taking notes.");
   });
   actions.appendChild(skip);
@@ -247,22 +320,22 @@ function closePopup() {
 }
 
 /***********************
-  HUD + Growth
+  HUD
 ************************/
-
 function renderHUD() {
   $("hearts").innerText = state.hearts;
   $("affection").innerText = state.affection;
   $("stage").innerText = state.stage;
   $("mood").innerText = state.mood;
 
-  setCharacterSprite(state.stage, state.mood);
   $("stageLabel").innerText = STAGE_LABELS[state.stage] || `Stage ${state.stage}`;
 
   const passives = [];
   if (state.flags.perfume) passives.push("Perfume passive: +10% affection gains");
   if (state.flags.tennisBall) passives.push("Tennis Ball passive: some bad moments become funny memories");
   if (state.flags.safeSleepy) passives.push("Forehead Blanket: Safe & Sleepy unlocked");
+  if (state.flags.tornadoFudge) passives.push("Tornado Fudge: chaos memories boosted");
+  if (state.flags.goofyNate) passives.push("Goofy Nate: happy outcomes boosted");
   $("passivesNote").innerText = passives.join(" • ");
 
   const inv = $("inventoryList");
@@ -277,38 +350,13 @@ function renderHUD() {
       inv.appendChild(pill);
     });
   }
-}
 
-function evolveCheck() {
-  if (state.stage === 1 && state.affection >= 25) return evolveTo(2, "Minyoung grew into a bright, curious kid 🎀");
-  if (state.stage === 2 && state.affection >= 60) return evolveTo(3, "Minyoung entered her college era: confident and chaotic ✨");
-  if (state.stage === 3 && state.affection >= 120) return evolveTo(4, "Minyoung leveled up into her adult form: unstoppable 🌷");
-
-  speak("Minyoung is still growing… keep earning hearts and making her laugh 💗");
-  maybePopup("home");
-}
-
-function evolveTo(stage, msg) {
-  state.stage = stage;
-  save();
-  renderHUD();
-
-  // quick happy flash
-  const prevMood = state.mood;
-  setMood("happy", { persist: false, flashMs: 1300 });
-  setTimeout(() => {
-    // go back to previous mood (unless it changed during popup)
-    if (state.mood === "neutral") setMood(prevMood, { persist: true });
-  }, 1400);
-
-  speak(msg);
-  maybePopup("home");
+  updateSprite();
 }
 
 /***********************
   SHOP (hidden affection values)
 ************************/
-
 const SHOP_ITEMS = [
   {
     id: "perfume",
@@ -351,9 +399,7 @@ Hidden Effect:
 If gifted unexpectedly → something good might happen.`,
     flavor: `"Sweetness arrives quietly."`,
     unique: false,
-    onBuy() {
-      if (Math.random() < 0.30) state.affection += 10;
-    }
+    onBuy() { if (Math.random() < 0.30) state.affection += 10; }
   },
   {
     id: "squid",
@@ -471,6 +517,65 @@ Activates “Safe & Sleepy”.`,
     flavor: `"Rest. I’ve got the watch."`,
     unique: true,
     onBuy() { state.flags.safeSleepy = true; }
+  },
+
+  /* New items you requested */
+  {
+    id: "koreanFeast",
+    name: `🍚 “Korean Comfort Feast” (한식 풀코스)`,
+    cost: 42,
+    affectionHidden: 0,
+    type: "Korean Food Buff",
+    desc: `A full, comforting Korean meal that hits like a hug: warm rice, soup, two side dishes, and that “everything is okay” feeling.
+
+Hidden Effect:
+Activates “Homebody Harmony”
+→ sad/angry outcomes become less likely for a while
+→ chance to trigger a soft extra popup`,
+    flavor: `“밥 먹고 나면, 마음도 조금 풀려요.”`,
+    unique: false,
+    onBuy() {
+      state.buffKoreanFeast = Math.max(state.buffKoreanFeast, 6);
+      setMood("happy", { persist: true });
+    }
+  },
+  {
+    id: "tornadoFudge",
+    name: `🌪️🐶 “Spinning Fudge” Tornado Dog Show Ticket`,
+    cost: 33,
+    affectionHidden: 0,
+    type: "Chaos Entertainment",
+    desc: `A front-row ticket to the show where Fudge does his signature move: spinning in circles until physics begs for mercy.
+
+Hidden Effect:
+Unlocks “Golden Retriever Energy: Tornado Edition”
+→ negative outcomes are more likely to flip into funny memories
+→ sometimes adds an extra surprise popup`,
+    flavor: `“He’s not spinning. He’s rebranding the atmosphere.”`,
+    unique: true,
+    onBuy() {
+      state.buffTornadoFudge = Math.max(state.buffTornadoFudge, 8);
+      state.flags.tornadoFudge = true;
+    }
+  },
+  {
+    id: "goofyNate",
+    name: `🎭 “Goofy Nate Extravaganza” (One-Man Comedy Tour)`,
+    cost: 55,
+    affectionHidden: 0,
+    type: "Partner Skill Upgrade",
+    desc: `A fully produced evening where Nate commits to the bit with alarming dedication.
+
+Hidden Effect:
+Activates “My Favorite Person”
+→ happy outcomes become more likely in popups
+→ sometimes adds a tiny extra romantic line after mini games`,
+    flavor: `“I’m not embarrassed. I’m in love.”`,
+    unique: true,
+    onBuy() {
+      state.buffGoofyNate = Math.max(state.buffGoofyNate, 10);
+      state.flags.goofyNate = true;
+    }
   }
 ];
 
@@ -510,6 +615,8 @@ function renderShop() {
 }
 
 function buyItem(id) {
+  touchAction();
+
   const item = SHOP_ITEMS.find(x => x.id === id);
   if (!item) return;
 
@@ -525,36 +632,37 @@ function buyItem(id) {
 
   // hidden affection value
   const hidden = item.affectionHidden ?? 0;
-  const boosted = Math.round(hidden * state.affectionMult);
+  const boosted = Math.round(hidden * (state.affectionMult || 1));
   state.affection += boosted;
 
   state.inventory.push(item.name);
   if (typeof item.onBuy === "function") item.onBuy();
 
-  // Gift reaction: happy sprite immediately
+  // Any gift => happy immediately
   setMood("happy", { persist: true });
   speak("Minyoung received a gift… and her mood instantly improved 💗");
 
   save();
+  recomputeStage();
   renderHUD();
   renderShop();
 
-  // chance of a follow-up popup
   maybePopup("afterGift");
 }
 
 /***********************
   NAV
 ************************/
-
-$("btnMiniGames").addEventListener("click", () => showView("minigames"));
+$("btnMiniGames").addEventListener("click", () => {
+  touchAction();
+  showView("minigames");
+});
 
 $("btnShop").addEventListener("click", () => {
+  touchAction();
   renderShop();
   showView("shop");
 });
-
-$("btnCheckGrowth").addEventListener("click", () => evolveCheck());
 
 $("btnReset").addEventListener("click", () => {
   localStorage.removeItem(SAVE_KEY);
@@ -563,6 +671,7 @@ $("btnReset").addEventListener("click", () => {
 
 document.querySelectorAll("[data-nav]").forEach(btn => {
   btn.addEventListener("click", () => {
+    touchAction();
     const where = btn.getAttribute("data-nav");
     if (where === "home") {
       showView("home");
@@ -573,12 +682,12 @@ document.querySelectorAll("[data-nav]").forEach(btn => {
 });
 
 /***********************
-  MINI GAMES (same 5 as before, with mood+popup hooks)
+  MINI GAMES
 ************************/
-
 let stopCurrentGame = null;
 
 $("btnQuitGame").addEventListener("click", () => {
+  touchAction();
   if (stopCurrentGame) stopCurrentGame();
   stopCurrentGame = null;
   showView("minigames");
@@ -589,6 +698,7 @@ document.querySelectorAll("[data-game]").forEach(btn => {
 });
 
 function startGame(key) {
+  touchAction();
   showView("game");
   const area = $("gameArea");
   area.innerHTML = "";
@@ -597,21 +707,20 @@ function startGame(key) {
   if (key === "catch") return gameCatch(area);
   if (key === "pop") return gamePop(area);
   if (key === "memory") return gameMemory(area);
-  if (key === "typing") return gameTyping(area);
   if (key === "react") return gameReact(area);
+  if (key === "dino") return gameDino(area);
 }
 
 /* Game 1: Catch the Hearts */
 function gameCatch(root) {
   $("gameTitle").innerText = "💗 Catch the Hearts";
-
   root.innerHTML = `
     <div class="game-frame">
       <div class="row">
         <div>Move with <span class="kbd">←</span> <span class="kbd">→</span> • 20 seconds</div>
         <div><strong id="catchScore">0</strong> caught</div>
       </div>
-      <canvas class="canvas" id="catchCanvas" width="620" height="320"></canvas>
+      <canvas class="canvas" id="catchCanvas" width="720" height="360"></canvas>
       <div class="center small" style="margin-top:10px;" id="catchMsg"></div>
     </div>
   `;
@@ -623,13 +732,13 @@ function gameCatch(root) {
   let last = performance.now();
   let score = 0;
 
-  const basket = { x: 310, y: 275, w: 90, h: 20, vx: 0 };
+  const basket = { x: 360, y: 300, w: 110, h: 22, vx: 0 };
   const hearts = [];
-  const spawnEvery = 450;
+  const spawnEvery = 420;
   let spawnTimer = 0;
 
   function spawn() {
-    hearts.push({ x: Math.random() * (c.width - 20) + 10, y: -10, r: 10, vy: 90 + Math.random() * 120 });
+    hearts.push({ x: Math.random() * (c.width - 20) + 10, y: -10, r: 10, vy: 100 + Math.random() * 140 });
   }
 
   function drawHeart(x, y, r) {
@@ -651,10 +760,7 @@ function gameCatch(root) {
     tLeft -= dt * 1000;
 
     spawnTimer += dt * 1000;
-    if (spawnTimer >= spawnEvery) {
-      spawnTimer = 0;
-      spawn();
-    }
+    if (spawnTimer >= spawnEvery) { spawnTimer = 0; spawn(); }
 
     basket.x += basket.vx * dt;
     basket.x = Math.max(0, Math.min(c.width - basket.w, basket.x));
@@ -668,10 +774,7 @@ function gameCatch(root) {
         h.y + h.r > basket.y &&
         h.y - h.r < basket.y + basket.h;
 
-      if (hit) {
-        score += 1;
-        h.y = 9999;
-      }
+      if (hit) { score += 1; h.y = 9999; }
     }
 
     ctx.clearRect(0, 0, c.width, c.height);
@@ -680,7 +783,7 @@ function gameCatch(root) {
 
     ctx.fillStyle = "rgba(255,111,165,.95)";
     ctx.fillRect(basket.x, basket.y, basket.w, basket.h);
-    ctx.fillRect(basket.x + 10, basket.y - 10, basket.w - 20, 10);
+    ctx.fillRect(basket.x + 12, basket.y - 12, basket.w - 24, 12);
 
     for (const h of hearts) drawHeart(h.x, h.y, h.r);
 
@@ -704,16 +807,21 @@ function gameCatch(root) {
     $("catchMsg").innerText = `Result: +${heartsEarned} hearts 💗`;
     speak("Minyoung: “Okay wait… that was kind of satisfying.”");
 
-    // mood nudge (not obvious)
-    if (score >= 10) setMood("happy");
-    else if (score <= 2 && Math.random() < 0.35) setMood("sad");
+    if (score >= 10) setMood("happy", { persist: true });
+    else if (score <= 2 && Math.random() < 0.35) setMood("sad", { persist: true });
+
+    // Goofy Nate: extra line sometimes
+    if (state.buffGoofyNate > 0 && Math.random() < 0.35) {
+      speak("Minyoung: “Why do I feel proud of you right now.”");
+    }
 
     maybePopup("afterGame");
   }
 
   function onKey(e) {
-    if (e.key === "ArrowLeft") basket.vx = -260;
-    if (e.key === "ArrowRight") basket.vx = 260;
+    touchAction();
+    if (e.key === "ArrowLeft") basket.vx = -300;
+    if (e.key === "ArrowRight") basket.vx = 300;
   }
   function onKeyUp(e) {
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") basket.vx = 0;
@@ -734,14 +842,13 @@ function gameCatch(root) {
 /* Game 2: Pop the Hearts */
 function gamePop(root) {
   $("gameTitle").innerText = "🫧 Pop the Hearts";
-
   root.innerHTML = `
     <div class="game-frame">
       <div class="row">
         <div>Click hearts • 15 seconds</div>
         <div>Popped: <strong id="popScore">0</strong></div>
       </div>
-      <div id="popField" style="position:relative; height:320px; border-radius:16px; border:1px dashed rgba(255,77,136,.35); background:rgba(255,255,255,.65); overflow:hidden; margin-top:10px;"></div>
+      <div id="popField" style="position:relative; height:360px; border-radius:16px; border:1px dashed rgba(255,77,136,.35); background:rgba(255,255,255,.65); overflow:hidden; margin-top:10px;"></div>
       <div class="center small" style="margin-top:10px;" id="popMsg"></div>
     </div>
   `;
@@ -755,14 +862,15 @@ function gamePop(root) {
     const h = document.createElement("button");
     h.style.position = "absolute";
     h.style.left = `${Math.random() * 88 + 2}%`;
-    h.style.top = `${Math.random() * 70 + 10}%`;
+    h.style.top = `${Math.random() * 72 + 8}%`;
     h.style.border = "none";
     h.style.background = "transparent";
     h.style.cursor = "pointer";
     h.style.fontSize = `${Math.random() * 18 + 22}px`;
-    h.innerText = "💗";
+    h.innerText = Math.random() < 0.85 ? "💗" : "💖";
     h.addEventListener("click", () => {
       if (!running) return;
+      touchAction();
       score++;
       $("popScore").innerText = String(score);
       h.remove();
@@ -771,7 +879,7 @@ function gamePop(root) {
     setTimeout(() => h.remove(), 900);
   }
 
-  const spawnInterval = setInterval(spawnHeart, 260);
+  const spawnInterval = setInterval(spawnHeart, 250);
   const timer = setTimeout(() => end(), 15000);
 
   function end() {
@@ -787,8 +895,12 @@ function gamePop(root) {
     $("popMsg").innerText = `Result: +${heartsEarned} hearts 💗`;
     speak("Minyoung: “Why was that actually addictive.”");
 
-    if (score >= 12) setMood("happy");
-    else if (score <= 3 && Math.random() < 0.25) setMood("angry");
+    if (score >= 12) setMood("happy", { persist: true });
+    else if (score <= 3 && Math.random() < 0.25) setMood("angry", { persist: true });
+
+    if (state.buffGoofyNate > 0 && Math.random() < 0.35) {
+      speak("Minyoung: “Okay… that was kinda cute. Do it again.”");
+    }
 
     maybePopup("afterGame");
   }
@@ -833,7 +945,10 @@ function gameMemory(root) {
     btn.dataset.val = deck[i];
     btn.dataset.open = "0";
     btn.innerText = "❔";
-    btn.addEventListener("click", () => onFlip(btn));
+    btn.addEventListener("click", () => {
+      touchAction();
+      onFlip(btn);
+    });
     return btn;
   }
 
@@ -876,8 +991,12 @@ function gameMemory(root) {
     $("memMsg").innerText = `Cleared: +${heartsEarned} hearts 💗`;
     speak("Minyoung: “You remembered the tiny things. That’s… unfairly cute.”");
 
-    if (misses <= 6) setMood("happy");
-    else if (misses >= 14 && Math.random() < 0.35) setMood("sad");
+    if (misses <= 6) setMood("happy", { persist: true });
+    else if (misses >= 14 && Math.random() < 0.35) setMood("sad", { persist: true });
+
+    if (state.buffGoofyNate > 0 && Math.random() < 0.35) {
+      speak("Minyoung: “Stop. That was romantic. Don’t look at me.”");
+    }
 
     maybePopup("afterGame");
   }
@@ -885,88 +1004,7 @@ function gameMemory(root) {
   stopCurrentGame = () => {};
 }
 
-/* Game 4: Love Typing */
-function gameTyping(root) {
-  $("gameTitle").innerText = "⌨️ Love Typing";
-
-  const prompts = [
-    "happy valentine’s minyoung",
-    "i brought you dinner",
-    "forehead blanket pls",
-    "shabu shabu tonight",
-    "you look cute don’t move"
-  ];
-
-  let idx = 0;
-  let score = 0;
-  let running = true;
-
-  root.innerHTML = `
-    <div class="game-frame">
-      <div class="row">
-        <div>Type the phrase exactly • 30 seconds</div>
-        <div>Score: <strong id="typeScore">0</strong></div>
-      </div>
-
-      <div style="margin-top:12px; font-weight:900; color:#333;" id="typePrompt"></div>
-      <input id="typeInput" style="width:100%; margin-top:10px; padding:12px; border-radius:14px; border:1px solid rgba(255,77,136,.25);" placeholder="type here..." />
-      <div class="center small" style="margin-top:10px;" id="typeMsg"></div>
-    </div>
-  `;
-
-  const promptEl = $("typePrompt");
-  const input = $("typeInput");
-
-  function nextPrompt() {
-    promptEl.innerText = prompts[idx % prompts.length];
-    input.value = "";
-    input.focus();
-  }
-  nextPrompt();
-
-  input.addEventListener("keydown", (e) => {
-    if (!running) return;
-    if (e.key !== "Enter") return;
-
-    const target = promptEl.innerText.trim();
-    const typed = input.value.trim();
-
-    if (typed === target) {
-      score++;
-      $("typeScore").innerText = String(score);
-      idx++;
-      nextPrompt();
-    } else {
-      input.value = "";
-    }
-  });
-
-  const timer = setTimeout(() => end(), 30000);
-
-  function end() {
-    running = false;
-    clearTimeout(timer);
-
-    const heartsEarned = clamp(score * 10, 10, 50);
-    const affectionEarned = Math.max(5, Math.round(score * 4));
-    addRewards(heartsEarned, affectionEarned);
-
-    $("typeMsg").innerText = `Result: +${heartsEarned} hearts 💗`;
-    speak("Minyoung: “Stop… you’re actually good at this 😳”");
-
-    if (score >= 4) setMood("happy");
-    else if (score === 0 && Math.random() < 0.35) setMood("angry");
-
-    maybePopup("afterGame");
-  }
-
-  stopCurrentGame = () => {
-    running = false;
-    clearTimeout(timer);
-  };
-}
-
-/* Game 5: Reaction Heart */
+/* Game 4: Reaction Heart */
 function gameReact(root) {
   $("gameTitle").innerText = "⚡ Reaction Heart";
 
@@ -1021,6 +1059,7 @@ function gameReact(root) {
   }
 
   btn.addEventListener("click", () => {
+    touchAction();
     if (!running) return;
     if (canClick) {
       score++;
@@ -1048,8 +1087,12 @@ function gameReact(root) {
     msg.innerText = `Result: +${heartsEarned} hearts 💗`;
     speak("Minyoung: “Your reflexes are… boyfriend-coded.”");
 
-    if (score >= 4) setMood("happy");
-    else if (score <= 1 && Math.random() < 0.35) setMood("sad");
+    if (score >= 4) setMood("happy", { persist: true });
+    else if (score <= 1 && Math.random() < 0.35) setMood("sad", { persist: true });
+
+    if (state.buffGoofyNate > 0 && Math.random() < 0.35) {
+      speak("Minyoung: “Okay… that was impressive. I hate that I’m smiling.”");
+    }
 
     maybePopup("afterGame");
   }
@@ -1062,13 +1105,285 @@ function gameReact(root) {
   nextRound();
 }
 
+/* Game 5: Minyoung Dino Run (boing + heart trail + themed obstacles) */
+function gameDino(root) {
+  touchAction();
+  $("gameTitle").innerText = "🦖 Minyoung Dino Run";
+
+  root.innerHTML = `
+    <div class="game-frame">
+      <div class="row">
+        <div>Jump with <span class="kbd">Space</span> or <span class="kbd">↑</span> • tap/click canvas • 30 seconds</div>
+        <div>Score: <strong id="dinoScore">0</strong></div>
+      </div>
+      <canvas class="canvas" id="dinoCanvas" width="720" height="360"></canvas>
+      <div class="center small" style="margin-top:10px;" id="dinoMsg"></div>
+    </div>
+  `;
+
+  const canvas = $("dinoCanvas");
+  const ctx = canvas.getContext("2d");
+
+  // boing SFX using WebAudio
+  let audioCtx = null;
+  function beep(freq = 520, dur = 0.06, type = "triangle", gain = 0.03) {
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = type;
+      o.frequency.value = freq;
+      g.gain.value = gain;
+      o.connect(g);
+      g.connect(audioCtx.destination);
+      o.start();
+      o.stop(audioCtx.currentTime + dur);
+    } catch {}
+  }
+  function boing() {
+    beep(520, 0.04, "triangle", 0.03);
+    beep(740, 0.05, "sine", 0.02);
+  }
+
+  let running = true;
+  let last = performance.now();
+  let tLeft = 30000;
+
+  let score = 0;
+  let speed = 220;
+  let spawnTimer = 0;
+  let nextSpawnMs = 900;
+
+  const groundY = 260;
+
+  const sprite = new Image();
+  sprite.src = `assets/characters/stage${clampStage(state.stage)}-neutral.png`;
+
+  const player = { x: 90, y: groundY, w: 52, h: 60, vy: 0, onGround: true };
+
+  const trail = [];
+  function addTrail() {
+    trail.push({
+      x: player.x + 6,
+      y: player.y + 22,
+      vx: -50 - Math.random() * 40,
+      vy: -10 + Math.random() * 20,
+      life: 0.9,
+      size: 16 + Math.random() * 10,
+      emoji: Math.random() < 0.5 ? "💗" : "💞"
+    });
+  }
+
+  const obs = [];
+
+  function obstacleSetForStage(stage) {
+    if (stage === 1) return ["💘","💗","🧸"];
+    if (stage === 2) return ["🎾","💘","💞"];
+    if (stage === 3) return ["☕","🦑","💘"];
+    return ["🍕","💘","감","🍂"];
+  }
+  const obstacleEmojis = obstacleSetForStage(clampStage(state.stage));
+
+  function jump() {
+    if (!running) return;
+    if (!player.onGround) return;
+    touchAction();
+    player.vy = -460;
+    player.onGround = false;
+    boing();
+    for (let i = 0; i < 6; i++) addTrail();
+  }
+
+  function spawnObstacle() {
+    const isTall = Math.random() < 0.35;
+    const emoji = obstacleEmojis[Math.floor(Math.random() * obstacleEmojis.length)];
+
+    obs.push({
+      x: canvas.width + 20,
+      y: groundY + (isTall ? -16 : 2),
+      w: isTall ? 22 : 18,
+      h: isTall ? 44 : 34,
+      kind: isTall ? "tall" : "short",
+      emoji
+    });
+  }
+
+  function rectsOverlap(a, b) {
+    return (a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y);
+  }
+
+  function drawBackground() {
+    ctx.fillStyle = "rgba(255, 255, 255, 0.72)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.strokeStyle = "rgba(255,77,136,.50)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, groundY + player.h);
+    ctx.lineTo(canvas.width, groundY + player.h);
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.22;
+    ctx.font = "18px ui-monospace, system-ui";
+    ctx.fillText("💗", 90, 60);
+    ctx.fillText("💞", 240, 40);
+    ctx.fillText("💖", 420, 70);
+    ctx.fillText("💘", 560, 52);
+    ctx.globalAlpha = 1;
+  }
+
+  function drawTrail(dt) {
+    for (let i = trail.length - 1; i >= 0; i--) {
+      const p = trail[i];
+      p.life -= dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 24 * dt;
+      if (p.life <= 0) { trail.splice(i, 1); continue; }
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.font = `${Math.floor(p.size)}px ui-monospace, system-ui`;
+      ctx.fillText(p.emoji, p.x, p.y);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawPlayer() {
+    ctx.globalAlpha = 0.16;
+    ctx.beginPath();
+    ctx.ellipse(player.x + player.w/2, groundY + player.h + 10, 18, 6, 0, 0, Math.PI*2);
+    ctx.fillStyle = "#000";
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    if (sprite.complete && sprite.naturalWidth > 0) {
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(sprite, player.x, player.y, player.w, player.h);
+    } else {
+      ctx.fillStyle = "rgba(255,77,136,.9)";
+      ctx.fillRect(player.x, player.y, player.w, player.h);
+    }
+  }
+
+  function drawObstacles() {
+    obs.forEach(o => {
+      const size = o.kind === "tall" ? 28 : 24;
+      ctx.font = `${size}px ui-monospace, system-ui`;
+      ctx.fillText(String(o.emoji), o.x - 2, o.y + o.h);
+    });
+  }
+
+  function end(winLike = true) {
+    running = false;
+    cleanup();
+
+    const heartsEarned = clamp(Math.round(score / 12) + 10, 10, 60);
+    const affectionEarned = clamp(Math.round(score / 25) + 6, 6, 28);
+    addRewards(heartsEarned, affectionEarned);
+
+    $("dinoMsg").innerText = `Result: +${heartsEarned} hearts 💗`;
+
+    if (winLike) {
+      speak("Minyoung: “Okay wait… I’m kind of athletic?”");
+      if (score >= 240) setMood("happy", { persist: true });
+    } else {
+      speak("Minyoung: “I tripped… but I did it cutely.”");
+      if (Math.random() < 0.45) setMood("sad", { persist: true });
+    }
+
+    if (state.buffGoofyNate > 0 && Math.random() < 0.45) {
+      speak("Minyoung: “I’m smiling. Don’t talk.”");
+    }
+
+    maybePopup("afterGame");
+  }
+
+  function loop(now) {
+    if (!running) return;
+    const dt = (now - last) / 1000;
+    last = now;
+
+    tLeft -= dt * 1000;
+    if (tLeft <= 0) { end(true); return; }
+
+    speed += dt * 7;
+
+    spawnTimer += dt * 1000;
+    if (spawnTimer >= nextSpawnMs) {
+      spawnTimer = 0;
+      spawnObstacle();
+      nextSpawnMs = 680 + Math.random() * 680;
+    }
+
+    const gravity = 1250;
+    player.vy += gravity * dt;
+    player.y += player.vy * dt;
+
+    if (player.y >= groundY) {
+      player.y = groundY;
+      player.vy = 0;
+      player.onGround = true;
+    }
+
+    for (const o of obs) o.x -= speed * dt;
+
+    for (let i = obs.length - 1; i >= 0; i--) {
+      if (obs[i].x + obs[i].w < -30) obs.splice(i, 1);
+    }
+
+    score += dt * 12;
+    $("dinoScore").innerText = String(Math.floor(score));
+
+    if (!player.onGround && Math.random() < 0.85) addTrail();
+    if (player.onGround && Math.random() < 0.08) addTrail();
+
+    const pHitbox = { x: player.x + 10, y: player.y + 10, w: player.w - 20, h: player.h - 16 };
+    for (const o of obs) {
+      const oHitbox = { x: o.x, y: o.y + 8, w: o.w + 10, h: o.h - 10 };
+      if (rectsOverlap(pHitbox, oHitbox)) { end(false); return; }
+    }
+
+    drawBackground();
+    drawTrail(dt);
+    drawObstacles();
+    drawPlayer();
+
+    requestAnimationFrame(loop);
+  }
+
+  function onKey(e) {
+    if (e.code === "Space" || e.key === "ArrowUp") {
+      e.preventDefault();
+      jump();
+    }
+  }
+  function onTap() { jump(); }
+
+  function cleanup() {
+    window.removeEventListener("keydown", onKey);
+    canvas.removeEventListener("pointerdown", onTap);
+  }
+
+  window.addEventListener("keydown", onKey);
+  canvas.addEventListener("pointerdown", onTap);
+
+  stopCurrentGame = () => {
+    running = false;
+    cleanup();
+  };
+
+  requestAnimationFrame(loop);
+}
+
 /***********************
   INIT
 ************************/
 load();
+state.stage = clampStage(state.stage || 1);
+recomputeStage();
 renderHUD();
 showView("home");
-speak("Nate… your mission is simple: make Minyoung laugh, feed her, and give her the best gifts 💗");
+speak("Nate… your mission is simple: make Minyoung laugh, feed her, and buy emotional upgrades 💗");
+startIdleWatcher();
 
-// sometimes a popup greets you...
+// sometimes a popup greets you
 setTimeout(() => { if (Math.random() < 0.25) maybePopup("home"); }, 700);
