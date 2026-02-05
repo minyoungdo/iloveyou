@@ -174,18 +174,18 @@ function startIdleWatcher() {
 const POPUPS = [
   {
     title: "A tiny decision appears…",
-    text: "Minyoung is staring at the fridge like it personally offended her.\nWhat do you do?",
+    text: "Minyoung is staring at the fridge for about 10 seconds now, without saying anything.\nWhat do you do?",
     options: [
-      { label: "Say nothing. Quietly rearrange it like a stealth ninja.", mood: "happy", hearts: +2, affection: +3 },
-      { label: "Deliver a serious speech about organization and discipline.", mood: "angry", hearts: +1, affection: -2 }
+      { label: "Quietly rearrange it, she'll get upset in 2 seconds.", mood: "happy", hearts: +2, affection: +3 },
+      { label: "Ask her what she is doing and tell her we should watch something fun.", mood: "angry", hearts: +1, affection: -2 }
     ]
   },
   {
-    title: "Side quest moment",
+    title: "Choose wisely!",
     text: "Minyoung sends a single message:\n“🙂”\nWhat is your response?",
     options: [
       { label: "Reply with a picture of something that reminds you of her.", mood: "happy", hearts: +1, affection: +4 },
-      { label: "Reply: “What does this mean” like a confused detective.", mood: "sad", hearts: +2, affection: -1 }
+      { label: "Reply: “Mmm look at those googly eyes, tasty tasty” like a creepy pervert.", mood: "happy", hearts: +2, affection: -1 }
     ]
   },
   {
@@ -193,7 +193,8 @@ const POPUPS = [
     text: "Minyoung is quiet on the couch. She looks fine but… suspiciously fine.\nWhat do you do?",
     options: [
       { label: "Sit next to her and match her silence. Just presence.", mood: "happy", hearts: 0, affection: +5 },
-      { label: "Cheerfully narrate everything you’re doing in detail.", mood: "angry", hearts: +2, affection: -2 }
+      { label: "Talk shit about something she dislikes to distract her.", mood: "angry", hearts: +2, affection: -2 },
+      { label: "Bring her all the snack options", mood: "happy", hearts: +10, affection: +10 }
     ]
   },
   {
@@ -210,6 +211,17 @@ const POPUPS = [
     options: [
       { label: "Agree instantly and treat it like sacred lore.", mood: "happy", hearts: +2, affection: +3 },
       { label: "Ask for a rubric so you can understand vibe categories.", mood: "angry", hearts: +1, affection: -2 }
+    ]
+  },
+    {
+    title: "What do you fucking want?",
+    text: "It's her birthday! She says:\n“Nate, you totally don't have to get me anything...”\nYou…",
+    options: [
+      { label: "literally prepare nothing and tell her "my presence is the gift"", mood: "sad", hearts: -20, affection: -20 },
+      { label: "Get her a dozen of Krispy Kreme donuts with cute candles", mood: "happy", hearts: +2, affection: +5 },
+      { label: "Write her a beautiful, heartfelt card.", mood: "happy", hearts: +2, affection: -2 },
+      { label: "Get her the item she mentioned she liked before.", mood: "happy", hearts: +20, affection: +20 },
+      { label: "Go on a trip to Cancun by yourself to avoid all this.", mood: "angry", hearts: -100, affection: -100 }
     ]
   }
 ];
@@ -1387,3 +1399,4 @@ startIdleWatcher();
 
 // sometimes a popup greets you
 setTimeout(() => { if (Math.random() < 0.25) maybePopup("home"); }, 700);
+
