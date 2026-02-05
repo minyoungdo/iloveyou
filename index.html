@@ -21,6 +21,15 @@
     <div class="heart h8">💖</div>
   </div>
 
+  <!-- Popup modal -->
+  <div class="modal hidden" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-card">
+      <div class="modal-title" id="modalTitle">A wild moment appears…</div>
+      <div class="modal-text" id="modalText"></div>
+      <div class="modal-actions" id="modalActions"></div>
+    </div>
+  </div>
+
   <main class="app">
     <header class="top">
       <div class="brand">
@@ -35,6 +44,7 @@
         <div class="stat"><span>💗 Hearts</span><strong id="hearts">0</strong></div>
         <div class="stat"><span>💞 Affection</span><strong id="affection">0</strong></div>
         <div class="stat"><span>✨ Stage</span><strong id="stage">1</strong></div>
+        <div class="stat"><span>🙂 Mood</span><strong id="mood">neutral</strong></div>
       </div>
     </header>
 
@@ -70,7 +80,7 @@
         <button class="btn ghost" data-nav="home">← Back</button>
       </div>
 
-      <p class="tip">Each game gives 💗 Hearts + 💞 Affection. (Perfume passive boosts affection gains.)</p>
+      <p class="tip">Each game gives 💗 Hearts + hidden affection. (Perfume boosts affection gains.)</p>
 
       <div class="grid">
         <button class="tile" data-game="catch">
@@ -103,8 +113,7 @@
         <button class="btn ghost" data-nav="home">← Back</button>
       </div>
 
-      <p class="tip">Buy gifts with 💗 Hearts. Items add 💞 Affection and some give passives.</p>
-
+      <p class="tip">Buy gifts with 💗 Hearts. Item effects are hidden 🤫</p>
       <div id="shopList" class="shop-list"></div>
     </section>
 
@@ -129,5 +138,3 @@
   <script src="game.js"></script>
 </body>
 </html>
-
-
