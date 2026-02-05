@@ -41,10 +41,10 @@ const state = {
 };
 
 const STAGE_LABELS = {
-  1: "Stage 1: Toddler",
-  2: "Stage 2: Child",
-  3: "Stage 3: College",
-  4: "Stage 4: Adult"
+  1: "Stage 1: Small Agi",
+  2: "Stage 2: Medium Agi",
+  3: "Stage 3: Big Agi",
+  4: "Stage 4: Like Giant Agi"
 };
 
 function clamp(n, min, max) {
@@ -306,10 +306,10 @@ function openPopup(popup) {
       renderHUD();
 
       const reaction = {
-        happy: "Minyoung looks pleased. Like… dangerously pleased 💗",
-        sad: "Minyoung goes quiet. You feel like you missed something 😭",
-        angry: "Minyoung is smiling… but it’s the kind that’s a warning 🙂",
-        neutral: "Minyoung nods. The vibe is… stable."
+        happy: "Minyoung looks pleased. Her black black eyes are filled with joy 💗",
+        sad: "Minyoung goes quiet. Her black black eyes get watery. You feel like you missed something 😭",
+        angry: "Minyoung's voice gets louder and louder... uh-oh, she's getting upset!",
+        neutral: "Minyoung is... watching you."
       }[finalMood];
 
       speak(reaction);
@@ -418,7 +418,7 @@ Special Ability: Unlocks “Golden Retriever Energy”
 
 Hidden Effect:
 If gifted unexpectedly → something good might happen.`,
-    flavor: `"Sweetness arrives quietly."`,
+    flavor: `"Sweetness arrives so intensely."`,
     unique: false,
     onBuy() {
       if (Math.random() < 0.3) state.affection += 10;
@@ -1150,7 +1150,7 @@ function gameReact(root) {
 /* Game 5: Minyoung Dino Run (boing + heart trail + themed obstacles) */
 function gameDino(root) {
   touchAction();
-  $("gameTitle").innerText = "🦖 Run, Minyoungosaurus!";
+  $("gameTitle").innerText = "🦖 Run, Cuddlosaurus!";
 
   root.innerHTML = `
     <div class="game-frame">
@@ -1442,4 +1442,5 @@ startIdleWatcher();
 setTimeout(() => {
   if (Math.random() < 0.25) maybePopup("home");
 }, 700);
+
 
