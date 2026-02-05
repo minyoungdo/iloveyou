@@ -314,7 +314,7 @@ Raises security meter noticeably.`,
     cost: 30,
     affection: 23,
     type: "Cozy Item",
-    desc: `A gentle hand rests across your forehead, shielding your eyes from the world. Everything suddenly feels quieter.
+    desc: `A gentle hand rests across Minyoung's forehead, shielding her eyes from the world. Everything suddenly feels quieter.
 Everything feels safe.
 
 Primary Effect:
@@ -907,3 +907,4 @@ load();
 renderHUD();
 showView("home");
 speak("Nate… your mission is simple: make Minyoung laugh, feed her, and buy emotional upgrades 💗");
+
