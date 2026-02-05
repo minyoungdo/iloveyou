@@ -380,7 +380,7 @@ const SHOP_ITEMS = [
   {
     id: "perfume",
     name: `🐾 “Drake Memory” Perfume (Anal Glands Scented)`,
-    cost: 90,
+    cost: 150,
     affectionHidden: 75,
     type: "Soul Item",
     desc: `A ridiculously strong scent that somehow smells just like when Drake's anal gland was leaking.
@@ -395,7 +395,7 @@ When worn, Minyoung gains the passive ability “Love That Never Leaves,” incr
   {
     id: "tennisBall",
     name: `🎾 Fudge’s Blessed Tennis Ball`,
-    cost: 80,
+    cost: 100,
     affectionHidden: 65,
     type: "Companion Relic",
     desc: `Slightly slobbery. Extremely bouncy. Holding it instantly restores Minyoung’s mood and prevents one bad day per month.
@@ -427,13 +427,11 @@ If gifted unexpectedly → something good might happen.`,
   {
     id: "squid",
     name: `🦑 Dangerously Addictive Dried Squid (가문어)`,
-    cost: 22,
+    cost: 30,
     affectionHidden: 18,
     type: "Snack Buff",
     desc: `Chewy, savory, impossible to stop eating. Restores energy after long workdays.
 
-Combo Bonus:
-Pairs with Romantic Mood → Stinky Kiss happens.`,
     flavor: `"Just one more bite… probably."`,
     unique: false,
     onBuy() {
@@ -528,8 +526,8 @@ Reduces morning grumpiness.`,
   {
     id: "foreheadKiss",
     name: `💤 Forehead Kiss`,
-    cost: 28,
-    affectionHidden: 21,
+    cost: 20,
+    affectionHidden: 50,
     type: "Security",
     desc: `Gentle. Unrushed. Usually when you least expect it.`,
     flavor: `"Right here is my favorite place."`,
@@ -538,8 +536,8 @@ Reduces morning grumpiness.`,
   {
     id: "foreheadBlanket",
     name: `🌙 Forehead Blanket`,
-    cost: 30,
-    affectionHidden: 23,
+    cost: 100,
+    affectionHidden: 150,
     type: "Cozy Item",
     desc: `A gentle hand rests across your forehead, shielding your eyes from the world.
 
@@ -556,8 +554,8 @@ Activates “Safe & Sleepy”.`,
   {
     id: "koreanFeast",
     name: `🍚 “Korean Feast”`,
-    cost: 42,
-    affectionHidden: 0,
+    cost: 60,
+    affectionHidden: 20,
     type: "Korean Food Buff",
     desc: `A full, comforting Korean meal that hits like a hug: warm rice, soup, seven side dishes, and that “everything is okay” feeling.
 
@@ -575,8 +573,8 @@ Activates “Homebody Harmony”
   {
     id: "tornadoFudge",
     name: `🌪️🐶 “Spinning Fudge” Tornado Dog Show Ticket`,
-    cost: 33,
-    affectionHidden: 0,
+    cost: 80,
+    affectionHidden: 20,
     type: "Chaos Entertainment",
     desc: `A front-row ticket to the show where Fudge does his signature move: spinning in circles until physics begs for mercy.
 
@@ -594,8 +592,8 @@ Unlocks “Golden Retriever Energy: Tornado Edition”
   {
     id: "goofyNate",
     name: `🎭 “Goofy Nate Extravaganza” (One-Man Comedy Tour)`,
-    cost: 55,
-    affectionHidden: 0,
+    cost: 20,
+    affectionHidden: 50,
     type: "Partner Skill Upgrade",
     desc: `A fully produced evening where Nate commits to the bit with alarming dedication.
 
@@ -1442,6 +1440,7 @@ startIdleWatcher();
 setTimeout(() => {
   if (Math.random() < 0.25) maybePopup("home");
 }, 700);
+
 
 
 
