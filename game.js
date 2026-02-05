@@ -433,7 +433,7 @@ If gifted unexpectedly → something good might happen.`,
     desc: `Chewy, savory, impossible to stop eating. Restores energy after long workdays.
 
 Combo Bonus:
-Pairs with Movie Night → something happens.`,
+Pairs with Romantic Mood → Stinky Kiss happens.`,
     flavor: `"Just one more bite… probably."`,
     unique: false,
     onBuy() {
@@ -1442,5 +1442,6 @@ startIdleWatcher();
 setTimeout(() => {
   if (Math.random() < 0.25) maybePopup("home");
 }, 700);
+
 
 
