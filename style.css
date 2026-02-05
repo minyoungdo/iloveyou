@@ -1,3 +1,4 @@
+/* style.css (FULL) */
 :root{
   --pink:#ff4d88;
   --pink2:#ff6fa5;
@@ -134,14 +135,18 @@ h1{margin:0;color:var(--pink);letter-spacing:.5px}
   padding:10px;
 }
 
+/* Bigger character area (your request) */
 .character{
-  width:220px;
-  height:220px;
+  width:320px;
+  height:320px;
   object-fit:contain;
   image-rendering: pixelated;
   border-radius:18px;
   border:1px dashed rgba(255,77,136,.35);
   background: linear-gradient(180deg, rgba(255,214,231,.45), rgba(255,234,244,.6));
+}
+@media (max-width:480px){
+  .character{ width:260px; height:260px; }
 }
 
 .stage-label{
@@ -154,6 +159,7 @@ h1{margin:0;color:var(--pink);letter-spacing:.5px}
   color:var(--muted);
   text-align:center;
   min-height:16px;
+  max-width: 380px;
 }
 
 .home-actions{
@@ -301,8 +307,8 @@ h1{margin:0;color:var(--pink);letter-spacing:.5px}
 
 .canvas{
   width:100%;
-  max-width:620px;
-  height:320px;
+  max-width:720px;
+  height:360px;
   border-radius:16px;
   background: rgba(255,255,255,.65);
   border:1px dashed rgba(255,77,136,.35);
