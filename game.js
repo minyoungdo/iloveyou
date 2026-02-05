@@ -126,12 +126,12 @@ function setMood(newMood, opts = { persist: true }) {
 
 function recomputeStage() {
   // Simple auto-evolve thresholds (edit if you want)
-  // Stage 1: <80, Stage 2: 80-159, Stage 3: 160-279, Stage 4: 280+
+  // Stage 1: <150, Stage 2: 150-499, Stage 3: 500-999, Stage 4: 1000+
   const a = state.affection || 0;
   let newStage = 1;
-  if (a >= 80) newStage = 2;
-  if (a >= 160) newStage = 3;
-  if (a >= 280) newStage = 4;
+  if (a >= 150) newStage = 2;
+  if (a >= 500) newStage = 3;
+  if (a >= 1000) newStage = 4;
 
   newStage = clampStage(newStage);
   if (newStage !== state.stage) {
@@ -1442,3 +1442,4 @@ startIdleWatcher();
 setTimeout(() => {
   if (Math.random() < 0.25) maybePopup("home");
 }, 700);
+
