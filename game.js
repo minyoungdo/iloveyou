@@ -254,6 +254,27 @@ function maybePopup(context = "any") {
   save();
 }
 
+/* ADDED: result popup helper (best placed right before openPopup/closePopup) */
+function openResultPopup({ title = "Outcome Unlocked ✨", text = "", buttonLabel = "OK" } = {}) {
+  const modal = $("modal");
+  $("modalTitle").innerText = title;
+  $("modalText").innerText = text;
+
+  const actions = $("modalActions");
+  actions.innerHTML = "";
+
+  const ok = document.createElement("button");
+  ok.className = "btn";
+  ok.innerText = buttonLabel;
+  ok.addEventListener("click", () => {
+    closePopup();
+    touchAction();
+  });
+
+  actions.appendChild(ok);
+  modal.classList.remove("hidden");
+}
+
 function openPopup(popup) {
   const modal = $("modal");
   $("modalTitle").innerText = popup.title;
@@ -271,12 +292,15 @@ function openPopup(popup) {
       closePopup();
       touchAction();
 
-      if (typeof opt.hearts === "number") state.hearts += opt.hearts;
+      const heartsDelta = (typeof opt.hearts === "number") ? opt.hearts : 0;
 
+      let affectionDeltaBoosted = 0;
       if (typeof opt.affection === "number") {
-        const boosted = Math.round(opt.affection * (state.affectionMult || 1));
-        state.affection += boosted;
+        affectionDeltaBoosted = Math.round(opt.affection * (state.affectionMult || 1));
       }
+
+      if (heartsDelta !== 0) state.hearts += heartsDelta;
+      if (affectionDeltaBoosted !== 0) state.affection += affectionDeltaBoosted;
 
       // ---- Buff logic: gently bend outcomes (not obvious) ----
       let finalMood = opt.mood;
@@ -309,6 +333,16 @@ function openPopup(popup) {
       }[finalMood];
 
       speak(reaction);
+
+      const fmt = (n) => (n >= 0 ? `+${n}` : `${n}`);
+      openResultPopup({
+        title: "Outcome Unlocked ✨",
+        text:
+          `${reaction}\n\n` +
+          `Hearts: ${fmt(heartsDelta)} 💗\n` +
+          `Affection: ${fmt(affectionDeltaBoosted)} 💞\n` +
+          `Mood: ${finalMood}`
+      });
     });
 
     actions.appendChild(btn);
@@ -1399,4 +1433,3 @@ startIdleWatcher();
 
 // sometimes a popup greets you
 setTimeout(() => { if (Math.random() < 0.25) maybePopup("home"); }, 700);
-
