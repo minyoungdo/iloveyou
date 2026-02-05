@@ -1,9 +1,10 @@
 /***********************
-  Minyoung Maker v1
-  - Home / Mini Games / Shop / Game screen
-  - 5 simple playable mini games
-  - Shop with items + passives
-  - Saves to localStorage
+  Minyoung Maker v2
+  - 4 stages
+  - Mood system (neutral/happy/sad/angry)
+  - Random popup questions that affect mood (+ hidden rewards/penalties)
+  - Shop hides affection values
+  - Gift makes Minyoung happy sprite immediately
 ************************/
 
 const $ = (id) => document.getElementById(id);
@@ -15,24 +16,26 @@ const VIEWS = {
   game: $("view-game")
 };
 
+const SAVE_KEY = "minyoungMakerSave_v2";
+
 const state = {
   hearts: 0,
   affection: 0,
   stage: 1,
+  mood: "neutral",            // neutral | happy | sad | angry
   inventory: [],
   affectionMult: 1.0,
-  flags: {}
+  flags: {},
+  // prevents popup spam
+  popupCooldown: 0
 };
 
 const STAGE_LABELS = {
   1: "Stage 1: Toddler",
   2: "Stage 2: Child",
-  3: "Stage 3: Teen",
-  4: "Stage 4: College",
-  5: "Stage 5: Early 30s"
+  3: "Stage 3: College",
+  4: "Stage 4: Adult"
 };
-
-const SAVE_KEY = "minyoungMakerSave_v1";
 
 function save() {
   localStorage.setItem(SAVE_KEY, JSON.stringify(state));
@@ -46,6 +49,8 @@ function load() {
     state.inventory ||= [];
     state.flags ||= {};
     state.affectionMult ||= 1.0;
+    state.mood ||= "neutral";
+    state.popupCooldown ||= 0;
   } catch {}
 }
 
@@ -58,35 +63,205 @@ function showView(name) {
   VIEWS[name].classList.remove("hidden");
 }
 
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
+
+/** mood handling */
+function setMood(newMood, opts = { flashMs: 1200, persist: true }) {
+  const allowed = ["neutral","happy","sad","angry"];
+  if (!allowed.includes(newMood)) newMood = "neutral";
+  state.mood = newMood;
+  save();
+  renderHUD();
+
+  // optional: auto-calm back to neutral after a bit (still counts as "status" while shown)
+  if (!opts.persist && newMood !== "neutral") {
+    setTimeout(() => {
+      state.mood = "neutral";
+      save();
+      renderHUD();
+    }, opts.flashMs ?? 1200);
+  }
+}
+
+/** sprite */
+function setCharacterSprite(stage, mood = "neutral") {
+  const img = $("character");
+
+  // Try mood file first
+  const moodPath = `assets/characters/stage${stage}-${mood}.png`;
+  const neutralPath = `assets/characters/stage${stage}-neutral.png`;
+
+  img.onerror = () => {
+    // fallback to neutral if mood file missing
+    img.onerror = () => {
+      img.removeAttribute("src");
+      img.alt = "Missing sprite. Add assets/characters/stage1-neutral.png etc.";
+    };
+    img.src = neutralPath;
+  };
+
+  img.src = moodPath;
+}
+
+/** rewards */
 function addRewards(heartsEarned, affectionEarned) {
   state.hearts += heartsEarned;
+
+  // affection gets perfume multiplier
   const boosted = Math.round(affectionEarned * state.affectionMult);
   state.affection += boosted;
+
+  // small mood drift: if she’s angry/sad, small affection gains calm her slightly
+  if (state.mood === "angry" && boosted >= 6 && Math.random() < 0.35) setMood("neutral");
+  if (state.mood === "sad" && boosted >= 4 && Math.random() < 0.40) setMood("neutral");
 
   save();
   renderHUD();
 }
 
-function setCharacterSprite(stage, mood = "neutral") {
-  const img = $("character");
-  img.onerror = () => {
-    img.removeAttribute("src");
-    img.alt = "Add sprites in assets/characters/: stage1-neutral.png etc.";
-  };
-  img.src = `assets/characters/stage${stage}-${mood}.png`;
+/***********************
+  Popup Questions (not obvious)
+************************/
+
+const POPUPS = [
+  {
+    title: "A tiny decision appears…",
+    text: "Minyoung is staring at the fridge like it personally offended her.\nWhat do you do?",
+    options: [
+      { label: "Say nothing. Quietly rearrange the fridge like a stealth ninja.", mood: "happy", hearts: +2, affection: +3 },
+      { label: "Offer a serious speech about food organization and discipline.", mood: "angry", hearts: +1, affection: -2 }
+    ]
+  },
+  {
+    title: "Side quest moment",
+    text: "Minyoung sends a single message:\n“🙂”\nWhat is your response?",
+    options: [
+      { label: "Reply with a picture of something that reminds you of her.", mood: "happy", hearts: +1, affection: +4 },
+      { label: "Reply: “What does this mean” like a confused detective.", mood: "sad", hearts: +2, affection: -1 }
+    ]
+  },
+  {
+    title: "Unexpected test",
+    text: "Minyoung is quiet on the couch. She looks fine but… suspiciously fine.\nWhat do you do?",
+    options: [
+      { label: "Sit next to her and match her silence. Just presence.", mood: "happy", hearts: 0, affection: +5 },
+      { label: "Cheerfully narrate everything you’re doing in detail.", mood: "angry", hearts: +2, affection: -2 }
+    ]
+  },
+  {
+    title: "A micro-drama",
+    text: "Minyoung says: “I had a long day.”\nPick the move.",
+    options: [
+      { label: "Ask one gentle question and then offer food.", mood: "happy", hearts: +1, affection: +4 },
+      { label: "Immediately suggest a productivity system.", mood: "sad", hearts: +2, affection: -1 }
+    ]
+  },
+  {
+    title: "Confusing but important",
+    text: "Minyoung points at a random object and goes:\n“This has my vibe.”\nYou…",
+    options: [
+      { label: "Agree instantly and treat it like sacred lore.", mood: "happy", hearts: +2, affection: +3 },
+      { label: "Ask for a rubric so you can understand the vibe categories.", mood: "angry", hearts: +1, affection: -2 }
+    ]
+  }
+];
+
+function maybePopup(context = "any") {
+  // cooldown to reduce spam
+  if (state.popupCooldown > 0) {
+    state.popupCooldown -= 1;
+    save();
+    return;
+  }
+
+  // chance to appear
+  const chance = (context === "afterGame") ? 0.55 : (context === "afterGift") ? 0.35 : 0.25;
+  if (Math.random() > chance) return;
+
+  const pick = POPUPS[Math.floor(Math.random() * POPUPS.length)];
+  openPopup(pick);
+
+  // set cooldown for next few actions
+  state.popupCooldown = 2;
+  save();
 }
+
+function openPopup(popup) {
+  const modal = $("modal");
+  $("modalTitle").innerText = popup.title;
+  $("modalText").innerText = popup.text;
+
+  const actions = $("modalActions");
+  actions.innerHTML = "";
+
+  popup.options.forEach(opt => {
+    const btn = document.createElement("button");
+    btn.className = "btn";
+    btn.innerText = opt.label;
+
+    btn.addEventListener("click", () => {
+      closePopup();
+
+      // apply hidden effects
+      if (typeof opt.hearts === "number") state.hearts += opt.hearts;
+      if (typeof opt.affection === "number") {
+        const boosted = Math.round(opt.affection * state.affectionMult);
+        state.affection += boosted;
+      }
+
+      setMood(opt.mood, { persist: true });
+      save();
+      renderHUD();
+
+      // little reaction line
+      const reaction = {
+        happy: "Minyoung looks pleased. Like… dangerously pleased 💗",
+        sad: "Minyoung goes quiet. You feel like you missed something 😭",
+        angry: "Minyoung is smiling… but it’s the kind that’s a warning 🙂",
+        neutral: "Minyoung nods. The vibe is… stable."
+      }[opt.mood];
+
+      speak(reaction);
+    });
+
+    actions.appendChild(btn);
+  });
+
+  // add a subtle “do nothing” close for safety
+  const skip = document.createElement("button");
+  skip.className = "btn ghost";
+  skip.innerText = "Ignore (risky)";
+  skip.addEventListener("click", () => {
+    closePopup();
+    speak("You ignored the moment. The universe is taking notes.");
+  });
+  actions.appendChild(skip);
+
+  modal.classList.remove("hidden");
+}
+
+function closePopup() {
+  $("modal").classList.add("hidden");
+}
+
+/***********************
+  HUD + Growth
+************************/
 
 function renderHUD() {
   $("hearts").innerText = state.hearts;
   $("affection").innerText = state.affection;
   $("stage").innerText = state.stage;
+  $("mood").innerText = state.mood;
 
-  setCharacterSprite(state.stage, "neutral");
+  setCharacterSprite(state.stage, state.mood);
   $("stageLabel").innerText = STAGE_LABELS[state.stage] || `Stage ${state.stage}`;
 
   const passives = [];
   if (state.flags.perfume) passives.push("Perfume passive: +10% affection gains");
-  if (state.flags.tennisBall) passives.push("Tennis Ball passive: chaos turns into funny memories sometimes");
+  if (state.flags.tennisBall) passives.push("Tennis Ball passive: some bad moments become funny memories");
   if (state.flags.safeSleepy) passives.push("Forehead Blanket: Safe & Sleepy unlocked");
   $("passivesNote").innerText = passives.join(" • ");
 
@@ -105,12 +280,12 @@ function renderHUD() {
 }
 
 function evolveCheck() {
-  if (state.stage === 1 && state.affection >= 20) return evolveTo(2, "Minyoung grew into a cheerful child 🎀");
-  if (state.stage === 2 && state.affection >= 45) return evolveTo(3, "Minyoung became a teenager with big opinions ✨");
-  if (state.stage === 3 && state.affection >= 75) return evolveTo(4, "Minyoung leveled up into her college era 💄");
-  if (state.stage === 4 && state.affection >= 120) return evolveTo(5, "Minyoung is in her early 30s and dangerously powerful 🌷");
+  if (state.stage === 1 && state.affection >= 25) return evolveTo(2, "Minyoung grew into a bright, curious kid 🎀");
+  if (state.stage === 2 && state.affection >= 60) return evolveTo(3, "Minyoung entered her college era: confident and chaotic ✨");
+  if (state.stage === 3 && state.affection >= 120) return evolveTo(4, "Minyoung leveled up into her adult form: unstoppable 🌷");
 
   speak("Minyoung is still growing… keep earning hearts and making her laugh 💗");
+  maybePopup("home");
 }
 
 function evolveTo(stage, msg) {
@@ -118,14 +293,20 @@ function evolveTo(stage, msg) {
   save();
   renderHUD();
 
-  setCharacterSprite(stage, "happy");
-  setTimeout(() => setCharacterSprite(stage, "neutral"), 1200);
+  // quick happy flash
+  const prevMood = state.mood;
+  setMood("happy", { persist: false, flashMs: 1300 });
+  setTimeout(() => {
+    // go back to previous mood (unless it changed during popup)
+    if (state.mood === "neutral") setMood(prevMood, { persist: true });
+  }, 1400);
 
   speak(msg);
+  maybePopup("home");
 }
 
 /***********************
-  SHOP
+  SHOP (hidden affection values)
 ************************/
 
 const SHOP_ITEMS = [
@@ -133,7 +314,7 @@ const SHOP_ITEMS = [
     id: "perfume",
     name: `🐾 “Drake Memory” Perfume (Anal Glands Scented)`,
     cost: 90,
-    affection: 75,
+    affectionHidden: 75,
     type: "Soul Item",
     desc: `A ridiculously named scent that somehow smells warm and comforting instead of questionable.
 When worn, Minyoung gains the passive ability “Love That Never Leaves,” increasing all affection gains by 10% for the rest of the year.`,
@@ -148,7 +329,7 @@ When worn, Minyoung gains the passive ability “Love That Never Leaves,” incr
     id: "tennisBall",
     name: `🎾 Fudge’s Blessed Tennis Ball`,
     cost: 80,
-    affection: 65,
+    affectionHidden: 65,
     type: "Companion Relic",
     desc: `Slightly slobbery. Extremely sacred. Holding it instantly restores Minyoung’s mood and prevents one bad day per month.
 
@@ -156,71 +337,62 @@ Special Ability: Unlocks “Golden Retriever Energy”
 → negative events have a 30% chance to turn into funny memories.`,
     flavor: `"Joy is loud, neon, and covered in dog hair."`,
     unique: true,
-    onBuy() {
-      state.flags.tennisBall = true;
-    }
+    onBuy() { state.flags.tennisBall = true; }
   },
   {
     id: "persimmon",
     name: `🌅 Perfectly Ripe Persimmon (감)`,
     cost: 30,
-    affection: 25,
+    affectionHidden: 25,
     type: "Seasonal Treasure",
     desc: `Honey-sweet and nostalgic. Eating it grants a temporary buff called Autumn Heart, making Minyoung extra reflective and affectionate.
 
 Hidden Effect:
-If gifted unexpectedly → +10 bonus points.`,
+If gifted unexpectedly → something good might happen.`,
     flavor: `"Sweetness arrives quietly."`,
     unique: false,
     onBuy() {
-      if (Math.random() < 0.30) {
-        state.affection += 10;
-        speak("Hidden bonus! Minyoung wasn’t expecting it… +10 extra affection 😭💗");
-      }
+      if (Math.random() < 0.30) state.affection += 10;
     }
   },
   {
     id: "squid",
     name: `🦑 Dangerously Addictive Dried Squid (가문어)`,
     cost: 22,
-    affection: 18,
+    affectionHidden: 18,
     type: "Snack Buff",
-    desc: `Chewy, savory, impossible to stop eating. Restores energy after long workdays and grants +5 productivity the next morning.
+    desc: `Chewy, savory, impossible to stop eating. Restores energy after long workdays.
 
 Combo Bonus:
-Pairs with Movie Night → +12 extra affection.`,
+Pairs with Movie Night → something happens.`,
     flavor: `"Just one more bite… probably."`,
     unique: false,
-    onBuy() {
-      state.flags.squid = true; // future combo hook
-    }
+    onBuy() { state.flags.squid = true; }
   },
   {
     id: "dinner",
     name: `🥡 “I Brought You Dinner”`,
     cost: 24,
-    affection: 18,
+    affectionHidden: 18,
     type: "Couple Move",
     desc: `Shows up with your favorite takeout after a long day without being asked.
 
 Hidden Bonus:
-+5 if he remembered the exact order.`,
+If he remembered the exact order…`,
     flavor: `"You looked tired. So I handled dinner."`,
     unique: false,
-    onBuy() {
-      if (Math.random() < 0.35) state.affection += 5;
-    }
+    onBuy() { if (Math.random() < 0.35) state.affection += 5; }
   },
   {
     id: "coffee",
     name: `☕ Morning Coffee Delivery`,
     cost: 18,
-    affection: 12,
+    affectionHidden: 12,
     type: "Couple Move",
     desc: `A warm cup placed gently next to you before you fully wake up.
 
 Passive Effect:
-Reduces morning grumpiness by 40%.`,
+Reduces morning grumpiness.`,
     flavor: `"You don’t have to open your eyes yet."`,
     unique: false
   },
@@ -228,12 +400,9 @@ Reduces morning grumpiness by 40%.`,
     id: "couch",
     name: `🛋️ Couch Cuddle`,
     cost: 14,
-    affection: 10,
+    affectionHidden: 10,
     type: "Cozy",
-    desc: `No phones. No TV scrolling. Just leaning into each other.
-
-Combo:
-Stacks with Movie Night for +6.`,
+    desc: `No phones. No scrolling. Just leaning into each other.`,
     flavor: `"Nothing happened. And it was perfect."`,
     unique: false
   },
@@ -241,44 +410,31 @@ Stacks with Movie Night for +6.`,
     id: "sawThis",
     name: `📦 “Saw This and Thought of You”`,
     cost: 20,
-    affection: 15,
+    affectionHidden: 15,
     type: "Thoughtful",
-    desc: `A small, random object that proves you live in his brain.
-
-Scaling:
-Affection increases based on thoughtfulness.`,
+    desc: `A small, random object that proves you live in his brain.`,
     flavor: `"It had your energy."`,
     unique: false,
-    onBuy() {
-      state.affection += Math.floor(Math.random() * 9);
-    }
+    onBuy() { state.affection += Math.floor(Math.random() * 9); }
   },
   {
     id: "fruit",
     name: `🍓 Fruit Cut Into Perfect Pieces`,
     cost: 22,
-    affection: 18,
+    affectionHidden: 18,
     type: "Care",
-    desc: `Was it necessary? No. Did he stand there cutting it anyway? Yes.
-
-Bonus:
-+4 if presented with a fork like royalty.`,
+    desc: `Was it necessary? No. Did he do it anyway? Yes.`,
     flavor: `"Eat. I know you forget."`,
     unique: false,
-    onBuy() {
-      if (Math.random() < 0.50) state.affection += 4;
-    }
+    onBuy() { if (Math.random() < 0.50) state.affection += 4; }
   },
   {
     id: "lastOne",
     name: `🍪 Saved You the Last One`,
     cost: 26,
-    affection: 20,
+    affectionHidden: 20,
     type: "Trust",
-    desc: `The final cookie. Untouched. Protected from himself.
-
-Trust Increase:
-Significant.`,
+    desc: `The final cookie. Untouched. Protected from himself.`,
     flavor: `"I was tempted. Be proud."`,
     unique: false
   },
@@ -286,12 +442,9 @@ Significant.`,
     id: "photo",
     name: `📸 “You Look Cute, Don’t Move” Photo`,
     cost: 20,
-    affection: 17,
+    affectionHidden: 17,
     type: "Memory",
-    desc: `You insist you look chaotic. He insists you look perfect.
-
-Memory Unlock:
-Creates a keepsake moment.`,
+    desc: `You insist you look chaotic. She insists you look perfect.`,
     flavor: `"I want to remember this version of you."`,
     unique: false
   },
@@ -299,12 +452,9 @@ Creates a keepsake moment.`,
     id: "foreheadKiss",
     name: `💤 Forehead Kiss`,
     cost: 28,
-    affection: 21,
+    affectionHidden: 21,
     type: "Security",
-    desc: `Gentle. Unrushed. Usually when you least expect it.
-
-Emotional Effect:
-Raises security meter noticeably.`,
+    desc: `Gentle. Unrushed. Usually when you least expect it.`,
     flavor: `"Right here is my favorite place."`,
     unique: false
   },
@@ -312,24 +462,15 @@ Raises security meter noticeably.`,
     id: "foreheadBlanket",
     name: `🌙 Forehead Blanket`,
     cost: 30,
-    affection: 23,
+    affectionHidden: 23,
     type: "Cozy Item",
-    desc: `A gentle hand rests across Minyoung's forehead, shielding her eyes from the world. Everything suddenly feels quieter.
-Everything feels safe.
+    desc: `A gentle hand rests across your forehead, shielding your eyes from the world.
 
 Primary Effect:
-Activates “Safe & Sleepy” → stress drops and sleep quality increases.
-
-Secondary Buff:
-Next-day patience +10.
-
-Rare Bonus:
-If paired with hair brushing or soft back rub → Instant Nap.`,
+Activates “Safe & Sleepy”.`,
     flavor: `"Rest. I’ve got the watch."`,
     unique: true,
-    onBuy() {
-      state.flags.safeSleepy = true;
-    }
+    onBuy() { state.flags.safeSleepy = true; }
   }
 ];
 
@@ -342,13 +483,12 @@ function renderShop() {
 
     const el = document.createElement("div");
     el.className = "shop-item";
-
     el.innerHTML = `
       <div class="shop-top">
         <div>
           <div class="shop-name">${item.name}</div>
           <div class="shop-meta">
-            <div><strong>Affection:</strong> +${item.affection} • <strong>Type:</strong> ${item.type}</div>
+            <div><strong>Type:</strong> ${item.type}</div>
             <div class="small" style="margin-top:6px; white-space:pre-line;">${item.desc}</div>
             <div class="small" style="margin-top:6px;"><em>${item.flavor}</em></div>
           </div>
@@ -361,7 +501,6 @@ function renderShop() {
         </div>
       </div>
     `;
-
     root.appendChild(el);
   });
 
@@ -383,20 +522,29 @@ function buyItem(id) {
   }
 
   state.hearts -= item.cost;
-  state.affection += item.affection;
+
+  // hidden affection value
+  const hidden = item.affectionHidden ?? 0;
+  const boosted = Math.round(hidden * state.affectionMult);
+  state.affection += boosted;
 
   state.inventory.push(item.name);
-
   if (typeof item.onBuy === "function") item.onBuy();
+
+  // Gift reaction: happy sprite immediately
+  setMood("happy", { persist: true });
+  speak("Minyoung received a gift… and her mood instantly improved 💗");
 
   save();
   renderHUD();
   renderShop();
-  speak(`Purchased: ${item.name} 💗 Minyoung is pleased.`);
+
+  // chance of a follow-up popup
+  maybePopup("afterGift");
 }
 
 /***********************
-  ROUTING / NAV
+  NAV
 ************************/
 
 $("btnMiniGames").addEventListener("click", () => showView("minigames"));
@@ -419,12 +567,13 @@ document.querySelectorAll("[data-nav]").forEach(btn => {
     if (where === "home") {
       showView("home");
       renderHUD();
+      if (Math.random() < 0.25) maybePopup("home");
     }
   });
 });
 
 /***********************
-  MINI GAMES
+  MINI GAMES (same 5 as before, with mood+popup hooks)
 ************************/
 
 let stopCurrentGame = null;
@@ -450,14 +599,6 @@ function startGame(key) {
   if (key === "memory") return gameMemory(area);
   if (key === "typing") return gameTyping(area);
   if (key === "react") return gameReact(area);
-}
-
-function addRewards(heartsEarned, affectionEarned) {
-  state.hearts += heartsEarned;
-  const boosted = Math.round(affectionEarned * state.affectionMult);
-  state.affection += boosted;
-  save();
-  renderHUD();
 }
 
 /* Game 1: Catch the Hearts */
@@ -534,7 +675,6 @@ function gameCatch(root) {
     }
 
     ctx.clearRect(0, 0, c.width, c.height);
-
     ctx.fillStyle = "rgba(255,255,255,.6)";
     ctx.fillRect(0, 0, c.width, c.height);
 
@@ -551,21 +691,24 @@ function gameCatch(root) {
 
     $("catchScore").innerText = score;
 
-    if (tLeft <= 0) {
-      end();
-      return;
-    }
-
+    if (tLeft <= 0) return end();
     requestAnimationFrame(loop);
   }
 
   function end() {
     running = false;
-    const heartsEarned = Math.max(5, Math.min(40, score * 2));
+    const heartsEarned = clamp(score * 2, 5, 40);
     const affectionEarned = Math.max(2, Math.round(score * 1.2));
     addRewards(heartsEarned, affectionEarned);
-    $("catchMsg").innerText = `Result: +${heartsEarned} hearts, +${Math.round(affectionEarned * state.affectionMult)} affection 💗`;
-    speak("Minyoung: “That was fun… do it again but more dramatic.”");
+
+    $("catchMsg").innerText = `Result: +${heartsEarned} hearts 💗`;
+    speak("Minyoung: “Okay wait… that was kind of satisfying.”");
+
+    // mood nudge (not obvious)
+    if (score >= 10) setMood("happy");
+    else if (score <= 2 && Math.random() < 0.35) setMood("sad");
+
+    maybePopup("afterGame");
   }
 
   function onKey(e) {
@@ -606,7 +749,6 @@ function gamePop(root) {
   let running = true;
   let score = 0;
   const field = $("popField");
-  $("popScore").innerText = "0";
 
   function spawnHeart() {
     if (!running) return;
@@ -638,12 +780,17 @@ function gamePop(root) {
     clearTimeout(timer);
     field.querySelectorAll("button").forEach(b => b.remove());
 
-    const heartsEarned = Math.max(6, Math.min(45, score * 3));
+    const heartsEarned = clamp(score * 3, 6, 45);
     const affectionEarned = Math.max(2, Math.round(score * 1.4));
     addRewards(heartsEarned, affectionEarned);
 
-    $("popMsg").innerText = `Result: +${heartsEarned} hearts, +${Math.round(affectionEarned * state.affectionMult)} affection 💗`;
-    speak("Minyoung: “Okay wait… why was that actually addictive.”");
+    $("popMsg").innerText = `Result: +${heartsEarned} hearts 💗`;
+    speak("Minyoung: “Why was that actually addictive.”");
+
+    if (score >= 12) setMood("happy");
+    else if (score <= 3 && Math.random() < 0.25) setMood("angry");
+
+    maybePopup("afterGame");
   }
 
   stopCurrentGame = () => {
@@ -675,6 +822,7 @@ function gameMemory(root) {
   let first = null;
   let lock = false;
   let matches = 0;
+  let misses = 0;
 
   function makeCard(i) {
     const btn = document.createElement("button");
@@ -696,10 +844,7 @@ function gameMemory(root) {
     card.dataset.open = "1";
     card.innerText = card.dataset.val;
 
-    if (!first) {
-      first = card;
-      return;
-    }
+    if (!first) { first = card; return; }
 
     if (first.dataset.val === card.dataset.val) {
       matches++;
@@ -709,6 +854,7 @@ function gameMemory(root) {
       return;
     }
 
+    misses++;
     lock = true;
     setTimeout(() => {
       first.dataset.open = "0";
@@ -726,8 +872,14 @@ function gameMemory(root) {
     const heartsEarned = 40;
     const affectionEarned = 18;
     addRewards(heartsEarned, affectionEarned);
-    $("memMsg").innerText = `Perfect memory: +${heartsEarned} hearts, +${Math.round(affectionEarned * state.affectionMult)} affection 💗`;
-    speak("Minyoung: “You remember everything about me. That’s… unfairly cute.”");
+
+    $("memMsg").innerText = `Cleared: +${heartsEarned} hearts 💗`;
+    speak("Minyoung: “You remembered the tiny things. That’s… unfairly cute.”");
+
+    if (misses <= 6) setMood("happy");
+    else if (misses >= 14 && Math.random() < 0.35) setMood("sad");
+
+    maybePopup("afterGame");
   }
 
   stopCurrentGame = () => {};
@@ -795,12 +947,17 @@ function gameTyping(root) {
     running = false;
     clearTimeout(timer);
 
-    const heartsEarned = Math.max(10, Math.min(50, score * 10));
+    const heartsEarned = clamp(score * 10, 10, 50);
     const affectionEarned = Math.max(5, Math.round(score * 4));
     addRewards(heartsEarned, affectionEarned);
 
-    $("typeMsg").innerText = `Result: +${heartsEarned} hearts, +${Math.round(affectionEarned * state.affectionMult)} affection 💗`;
+    $("typeMsg").innerText = `Result: +${heartsEarned} hearts 💗`;
     speak("Minyoung: “Stop… you’re actually good at this 😳”");
+
+    if (score >= 4) setMood("happy");
+    else if (score === 0 && Math.random() < 0.35) setMood("angry");
+
+    maybePopup("afterGame");
   }
 
   stopCurrentGame = () => {
@@ -888,8 +1045,13 @@ function gameReact(root) {
     const affectionEarned = 6 + score * 3;
     addRewards(heartsEarned, affectionEarned);
 
-    msg.innerText = `Result: +${heartsEarned} hearts, +${Math.round(affectionEarned * state.affectionMult)} affection 💗`;
+    msg.innerText = `Result: +${heartsEarned} hearts 💗`;
     speak("Minyoung: “Your reflexes are… boyfriend-coded.”");
+
+    if (score >= 4) setMood("happy");
+    else if (score <= 1 && Math.random() < 0.35) setMood("sad");
+
+    maybePopup("afterGame");
   }
 
   stopCurrentGame = () => {
@@ -906,5 +1068,7 @@ function gameReact(root) {
 load();
 renderHUD();
 showView("home");
-speak("Nate… your mission is simple: make Minyoung laugh, feed her, and buy emotional upgrades 💗");
+speak("Nate… your mission is simple: make Minyoung laugh, feed her, and give her the best gifts 💗");
 
+// sometimes a popup greets you...
+setTimeout(() => { if (Math.random() < 0.25) maybePopup("home"); }, 700);
