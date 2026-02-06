@@ -157,33 +157,20 @@ function addRewards(heartsEarned, affectionEarned) {
 }
 
 /***********************
-  Idle anger/sadness watcher
+  Idle anger watcher
 ************************/
 function startIdleWatcher() {
   setInterval(() => {
     const now = Date.now();
-    const idleMs = now - (state.lastActionAt ?? now);
-
-    // 60 seconds -> Angry
-    if (idleMs >= 60000) {
+    const idleMs = now - (state.lastActionAt || now);
+    if (idleMs >= 30000) {
       if (state.mood !== "angry") {
         setMood("angry", { persist: true });
-        speak("Minyoung has been waiting forever!! 🤬");
-      }
-      return; // important: prevents also hitting the sad logic
-    }
-
-    // 30 seconds -> Sad
-    if (idleMs >= 30000) {
-      if (state.mood !== "sad") {
-        setMood("sad", { persist: true });
-        speak("Stella looks a little lonely… 🥺");
+        speak("Minyoung is waiting… and getting annoyed 😭 (Go play a game or buy a gift.)");
       }
     }
   }, 500);
 }
-
-
 
 /***********************
   Popup Questions (not obvious)
@@ -1453,9 +1440,6 @@ startIdleWatcher();
 setTimeout(() => {
   if (Math.random() < 0.25) maybePopup("home");
 }, 700);
-
-
-
 
 
 
