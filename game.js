@@ -162,26 +162,27 @@ function addRewards(heartsEarned, affectionEarned) {
 function startIdleWatcher() {
   setInterval(() => {
     const now = Date.now();
-    const idleMs = now - (state.lastActionAt || now);
+    const idleMs = now - (state.lastActionAt ?? now);
 
-    // 60 seconds → Angry
+    // 60 seconds -> Angry
     if (idleMs >= 60000) {
       if (state.mood !== "angry") {
         setMood("angry", { persist: true });
-        speak("Minyoung has been waiting forever!! 😤");
+        speak("Minyoung has been waiting forever!! 🤬");
       }
+      return; // important: prevents also hitting the sad logic
     }
 
-    // 30 seconds → Sad (only if not already angry)
-    else if (idleMs >= 30000) {
+    // 30 seconds -> Sad
+    if (idleMs >= 30000) {
       if (state.mood !== "sad") {
         setMood("sad", { persist: true });
         speak("Stella looks a little lonely… 🥺");
       }
     }
-
   }, 500);
 }
+
 
 
 /***********************
@@ -1452,6 +1453,7 @@ startIdleWatcher();
 setTimeout(() => {
   if (Math.random() < 0.25) maybePopup("home");
 }, 700);
+
 
 
 
