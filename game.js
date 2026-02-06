@@ -413,20 +413,19 @@ If gifted unexpectedly → something good might happen.`,
     unique: false,
     onBuy() { if (Math.random() < 0.30) state.affection += 10; }
   },
-  {
-    id: "squid",
-    name: `🦑 Dangerously Addictive Dried Squid (가문어)`,
-    cost: 22,
-    affectionHidden: 18,
-    type: "Snack Buff",
-    desc: `Chewy, savory, impossible to stop eating. Restores energy after long workdays.
-
-Combo Bonus:
-Pairs with Movie Night → something happens.`,
-    flavor: `"Just one more bite… probably."`,
-    unique: false,
-    onBuy() { state.flags.squid = true; }
-  },
+{
+  id: "squid",
+  name: `🦑 Dangerously Addictive Dried Squid (가문어)`,
+  cost: 30,
+  affectionHidden: 18,
+  type: "Snack Buff",
+  desc: `Chewy, savory, impossible to stop eating. Restores energy after long workdays.`,
+  flavor: `"Just one more bite… probably."`,
+  unique: false,
+  onBuy() {
+    state.flags.squid = true;
+  }
+},
   {
     id: "dinner",
     name: `🥡 “I Brought You Dinner”`,
@@ -1399,4 +1398,5 @@ startIdleWatcher();
 
 // sometimes a popup greets you
 setTimeout(() => { if (Math.random() < 0.25) maybePopup("home"); }, 700);
+
 
